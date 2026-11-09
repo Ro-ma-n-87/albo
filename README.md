@@ -1,6 +1,6 @@
 # ALBO Connect für iPhone und iPad
 
-Dieses Paket enthält den nativen SwiftUI-Quellcode und ein Xcode-Projekt nach deiner Bildvorlage. Es ist **noch keine installierbare iPhone-App**. Auf dem vorhandenen Windows-Rechner fehlen Xcode, der iOS-Simulator und Apple-Signierung. Der native Build und die Gerätetests sind deshalb noch offen.
+Dieses Paket enthält den nativen SwiftUI-Quellcode und das Xcode-Projekt nach deiner Bildvorlage. Der GitHub-Build vom 9. November 2026 war erfolgreich: sieben native Tests und sieben Server-Tests bestanden; eine echte arm64-Geräte-IPA wurde erstellt. **Die IPA ist noch unsigniert und lässt sich ohne eigene Apple-Signierung nicht direkt auf einem normalen iPhone installieren.** Bedienung, Spracheingabe und Netzwerkabgleich auf einem echten Gerät bleiben zu prüfen.
 
 Im Quellcode umgesetzt:
 
@@ -17,7 +17,7 @@ Im Quellcode umgesetzt:
 - Kunden-, Mitarbeiter- und Vorlagenverwaltung auf dem Gerät, mit breiter Ansicht auf dem iPad.
 - Datensicherung und Wiederherstellung einschließlich Fotoanhängen und Unterschriften.
 
-Zusätzlich ist eine **echte lokale PC-Verwaltung** im Ordner `pc` enthalten. Speicherung, Geräte-Kopplung, Mitarbeiterberechtigungen, Widerruf von Gerätezugängen und das Zusammenführen paralleler Änderungen wurden unter Windows getestet. Der dazugehörige native iPhone-Abgleich ist implementiert, aber noch nicht auf Apple-Hardware gebaut oder getestet. Es handelt sich um eine manuell ausgelöste Synchronisierung, keine laufende Cloud-Verbindung.
+Zusätzlich ist eine **echte lokale PC-Verwaltung** im Ordner `pc` enthalten. Speicherung, Geräte-Kopplung, Mitarbeiterberechtigungen, Widerruf von Gerätezugängen und das Zusammenführen paralleler Änderungen wurden unter Windows getestet. Der dazugehörige native iPhone-Abgleich ist kompiliert; der vollständige Netzwerkabgleich mit einem echten iPhone ist noch nicht geprüft. Es handelt sich um eine manuell ausgelöste Synchronisierung, keine laufende Cloud-Verbindung.
 
 ## PC-Verwaltung jetzt unter Windows testen
 
@@ -75,12 +75,12 @@ bash scripts/test-on-mac.sh
 
 ## Builddienst bei ausschließlich Windows
 
-Die Datei `.github/workflows/apple-build.yml` bereitet Tests und einen Geräte-Build auf einem macOS-Runner von GitHub Actions vor. Sie wurde noch nicht ausgeführt.
+Die Datei `.github/workflows/apple-build.yml` führt Tests und einen Geräte-Build auf einem macOS-Runner aus. Der erste erfolgreiche Lauf ist [hier dokumentiert](https://github.com/Ro-ma-n-87/albo/actions/runs/42670462238).
 
 1. Das Projekt liegt für das öffentliche Repository `Ro-ma-n-87/albo` vor. Die öffentliche Veröffentlichung von Quellcode, ALBO-Grafik und Build-Konfiguration wurde vom Nutzer ausdrücklich freigegeben.
 2. Unter **Actions → Apple App Build → Run workflow** starten.
 3. Buildprotokoll und Testergebnis prüfen. Erst nach erfolgreichen Windows- und Simulator-Tests startet der Geräte-Build.
-4. Das Artefakt **ALBOConnect-unsigned-IPA** herunterladen. Nach dem Entpacken enthält es `ALBOConnect-unsigned.ipa`, eine Prüfsumme und einen Hinweis zum Signierungsstatus. Eine solche IPA wurde noch nicht tatsächlich gebaut.
+4. Das Artefakt **ALBOConnect-unsigned-IPA** herunterladen. Nach dem Entpacken enthält es `ALBOConnect-unsigned.ipa`, eine Prüfsumme und einen Hinweis zum Signierungsstatus.
 
 Die Geräte-IPA wird aus dem `iphoneos`-Build erstellt. Das Skript prüft Plattform, arm64-Code und die Payload-Struktur. Eine Simulator-App wird nicht einfach in `.ipa` umbenannt.
 
@@ -90,7 +90,7 @@ Apple beschreibt die notwendigen Signierungs- und Geräteprofile unter [Distribu
 
 ## Prüfnachweis und offene Arbeit
 
-Siehe `STATUS.md`. Insbesondere sind ein erfolgreicher Apple-Build, Gerätetests, ein visueller Vergleich auf iPhone/iPad und der vollständige Abgleich zwischen echten iPhones und PC noch nicht nachgewiesen.
+Siehe `STATUS.md`. Apple-Build und Logiktests sind nachgewiesen. Apple-Signierung, Installation, echte Gerätetests, ein visueller Vergleich auf iPhone/iPad und der vollständige Abgleich zwischen echten iPhones und PC sind noch offen.
 
 Die Grafik `Reference.imageset/reference.png` ist die vom Nutzer bereitgestellte Bildvorlage. Die App zeigt daraus den Logo-Ausschnitt. Für eine scharfe Produktionsdarstellung kann dieser später durch die originale Logodatei ersetzt werden.
 
