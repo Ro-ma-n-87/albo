@@ -94,4 +94,14 @@ final class StoreTests: XCTestCase {
         XCTAssertThrowsError(try PCSync.serverURL("https://user:password@example.com"))
         XCTAssertThrowsError(try PCSync.serverURL("https://example.com/?token=secret"))
     }
+    func testVPNAddressesRequireExplicitPrivateVPNMode() throws {
+        XCTAssertThrowsError(try PCSync.serverURL("http://100.80.10.20:8788"))
+        XCTAssertEqual(try PCSync.serverURL("http://100.80.10.20:8788", privateVPN: true).host, "100.80.10.20")
+        XCTAssertThrowsError(try PCSync.serverURL("http://100.63.255.255:8788", privateVPN: true))
+        XCTAssertThrowsError(try PCSync.serverURL("http://100.128.0.1:8788", privateVPN: true))
+        XCTAssertThrowsError(try PCSync.serverURL("http://example.com", privateVPN: true))
+        XCTAssertThrowsError(try PCSync.serverURL("http://100.80.10.999:8788", privateVPN: true))
+        XCTAssertThrowsError(try PCSync.serverURL("http://100.80.fake.10.20:8788", privateVPN: true))
+        XCTAssertThrowsError(try PCSync.serverURL("http://192.168.fake.1.20:8787"))
+    }
 }

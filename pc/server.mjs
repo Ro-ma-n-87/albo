@@ -5,6 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
+import {isIPv4} from 'node:net';
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 const fields=['jobs','reports','entries','templates','employees','customers'];
@@ -15,6 +16,7 @@ const canonical=v=>JSON.stringify(v&&typeof v==='object'?(Array.isArray(v)?v.map
 const equal=(a,b)=>a===undefined||b===undefined?a===b:canonical(a)===canonical(b);
 const hash=s=>crypto.createHash('sha256').update(s).digest('hex');
 const loopback=ip=>ip==='127.0.0.1'||ip==='::1'||ip==='::ffff:127.0.0.1';
+export const privateVPNAddress=ip=>typeof ip==='string'&&isIPv4(ip)&&ip.split('.')[0]==='100'&&Number(ip.split('.')[1])>=64&&Number(ip.split('.')[1])<=127;
 const failure=(status,message,extra={})=>Object.assign(new Error(message),{status,...extra});
 const text=(v,max=2000)=>typeof v==='string'&&v.length<=max;
 const validID=v=>typeof v==='string'&&/^[A-Fa-f0-9]{8}-(?:[A-Fa-f0-9]{4}-){3}[A-Fa-f0-9]{12}$/.test(v);
@@ -85,7 +87,9 @@ function workerMayChange(user,before,after){
   for(const name of new Set([...Object.keys(before.clocks),...Object.keys(after.clocks)]))if(name!==employee.name&&!equal(before.clocks[name],after.clocks[name]))throw failure(403,'Fremde Zeiterfassung darf nicht geändert werden.');
 }
 
-export function createWorkspaceServer({dataDir=path.join(here,'data'),host='127.0.0.1',port=8787,tls,allowInsecureLAN=false}={}){
+export function createWorkspaceServer({dataDir=path.join(here,'data'),host='127.0.0.1',port=8787,tls,allowInsecureLAN=false,vpnHost,vpnPort=8788}={}){
+  if(vpnHost&&!privateVPNAddress(vpnHost))throw Error('Für die private VPN-Verbindung ist die NetBird-Adresse des PCs aus 100.64.0.0/10 erforderlich.');
+  if(vpnHost&&(!loopback(host)||tls))throw Error('Die lokale Verwaltung muss im privaten VPN-Modus ausschließlich auf localhost laufen.');
   if(!loopback(host)&&!tls&&!allowInsecureLAN)throw Error('Für Netzwerkbetrieb HTTPS konfigurieren oder den unverschlüsselten LAN-Test ausdrücklich mit --allow-insecure-lan aktivieren.');
   fs.mkdirSync(dataDir,{recursive:true});const filename=path.join(dataDir,'workspace.json');
   let state;
@@ -110,16 +114,18 @@ export function createWorkspaceServer({dataDir=path.join(here,'data'),host='127.
   const view=()=>({workspaceID:state.workspaceID,revision:state.revision,proof:proof(state.revision,state.database),backup:{version:1,database:state.database,photos:state.photos}});
   const respond=(res,status,body,headers={})=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers});res.end(JSON.stringify(body));};
   async function body(req){let size=0;const chunks=[];for await(const chunk of req){size+=chunk.length;if(size>64*1024*1024)throw failure(413,'Datenpaket ist größer als 64 MB.');chunks.push(chunk);}try{return JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw failure(400,'Ungültige JSON-Daten.');}}
-  function authorized(req){
+  function authorized(req,remote=false){
     const bearer=/^Bearer ([a-f0-9]{64})$/i.exec(req.headers.authorization||'');
     if(bearer){const result=state.keys.find(k=>k.hash===hash(bearer[1]));if(result){if(result.role==='worker'&&!state.database.employees.some(e=>key(e.id)===key(result.employeeID)&&e.active))throw failure(403,'Mitarbeiterzugang ist nicht aktiv.');return result;}}
+    if(remote)throw failure(401,'Für den Baustellenzugriff ist ein eigener Kopplungsschlüssel erforderlich.');
     const cookie=/(?:^|;\s*)alboSession=([a-f0-9]{64})(?:;|$)/.exec(req.headers.cookie||'');const session=cookie&&sessions.get(cookie[1]);
     if(session&&session.expires>Date.now())return {role:'admin',id:'local'};
     throw failure(401,'Bitte anmelden oder Gerät koppeln.');
   }
-  const handler=async(req,res)=>{
+  const handler=async(req,res,remote=false)=>{
     try{
       const url=new URL(req.url,'http://localhost');
+      if(remote&&!((req.method==='GET'&&url.pathname==='/api/workspace')||(req.method==='POST'&&url.pathname==='/api/sync')))throw failure(403,'Über die Baustellenverbindung ist nur der Datenabgleich freigegeben.');
       if(req.headers.origin&&req.headers.origin!==`${tls?'https':'http'}://${req.headers.host}`)throw failure(403,'Anfrage von fremdem Ursprung abgelehnt.');
       if(req.headers['sec-fetch-site']==='cross-site')throw failure(403,'Fremde Website darf nicht auf diese Verwaltung zugreifen.');
       if(req.method==='POST'&&url.pathname==='/api/local-session'){
@@ -129,7 +135,7 @@ export function createWorkspaceServer({dataDir=path.join(here,'data'),host='127.
         return respond(res,200,{ok:true},{'Set-Cookie':`alboSession=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${tls?'; Secure':''}`});
       }
       if(url.pathname.startsWith('/api/')){
-        const user=authorized(req);
+        const user=authorized(req,remote);
         if(req.method==='GET'&&url.pathname==='/api/workspace')return respond(res,200,{...view(),identity:{role:user.role,employeeID:user.employeeID??null}});
         if(req.method==='GET'&&url.pathname==='/api/keys'){if(user.role!=='admin')throw failure(403,'Nur Verwaltung.');return respond(res,200,{keys:state.keys.map(({hash,...rest})=>rest)});}
         if(req.method==='POST'&&url.pathname==='/api/keys'){
@@ -172,15 +178,23 @@ export function createWorkspaceServer({dataDir=path.join(here,'data'),host='127.
       const [file,type]=resources[url.pathname];res.writeHead(200,{'Content-Type':type,'X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'",'Cache-Control':'no-store'});res.end(fs.readFileSync(path.join(here,file)));
     }catch(error){respond(res,error.status||500,{error:error.status?error.message:'Speichern oder Verarbeiten fehlgeschlagen. Vorhandene Daten bleiben erhalten.',...(error.conflicts?{conflicts:error.conflicts}:{})});}
   };
-  const server=tls?https.createServer(tls,handler):http.createServer(handler);server.requestTimeout=30000;
-  return {server,listen:()=>new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,host,()=>resolve(server.address()));}),close:()=>new Promise(resolve=>server.close(resolve)),snapshot:()=>clone(view())};
+  const localHandler=(req,res)=>handler(req,res,false),remoteHandler=(req,res)=>handler(req,res,true);
+  const server=tls?https.createServer(tls,localHandler):http.createServer(localHandler);server.requestTimeout=30000;
+  const vpnServer=vpnHost?http.createServer(remoteHandler):null;if(vpnServer)vpnServer.requestTimeout=30000;
+  const start=(listener,p,h)=>new Promise((resolve,reject)=>{listener.once('error',reject);listener.listen(p,h,()=>resolve(listener.address()));});
+  const stop=listener=>new Promise(resolve=>listener?.listening?listener.close(resolve):resolve());
+  return {server,vpnServer,remoteHandler,async listen(){try{const address=await start(server,port,host);if(vpnServer)address.vpn=await start(vpnServer,vpnPort,vpnHost);return address;}catch(error){await Promise.all([stop(server),stop(vpnServer)]);throw error;}},async close(){await Promise.all([stop(server),stop(vpnServer)]);},snapshot:()=>clone(view())};
 }
 
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   const lan=process.argv.includes('--lan'),allowInsecureLAN=process.argv.includes('--allow-insecure-lan');
+  const privateVPN=process.argv.includes('--private-vpn');
+  if(privateVPN&&!process.env.ALBO_VPN_IP)throw Error('Die NetBird-IP des Büro-PCs fehlt. Starte Start-Baustelle-Windows.cmd.');
+  if(privateVPN&&lan)throw Error('--private-vpn nicht zusammen mit --lan verwenden.');
   const tls=process.env.ALBO_TLS_KEY&&process.env.ALBO_TLS_CERT?{key:fs.readFileSync(process.env.ALBO_TLS_KEY),cert:fs.readFileSync(process.env.ALBO_TLS_CERT)}:undefined;
-  const app=createWorkspaceServer({dataDir:process.env.ALBO_DATA_DIR||path.join(here,'data'),host:lan?'0.0.0.0':'127.0.0.1',port:Number(process.env.ALBO_PORT||8787),tls,allowInsecureLAN});
+  const app=createWorkspaceServer({dataDir:process.env.ALBO_DATA_DIR||path.join(here,'data'),host:lan?'0.0.0.0':'127.0.0.1',port:Number(process.env.ALBO_PORT||8787),tls,allowInsecureLAN,vpnHost:privateVPN?process.env.ALBO_VPN_IP:undefined});
   const address=await app.listen();console.log(`ALBO Connect PC-Verwaltung: ${tls?'https':'http'}://localhost:${address.port}`);
+  if(address.vpn)console.log(`Private Baustellenverbindung: http://${address.vpn.address}:${address.vpn.port} (nur bei aktiver VPN-Verbindung)`);
   if(process.argv.includes('--open')){
     const url=`${tls?'https':'http'}://localhost:${address.port}`;
     if(process.platform==='win32')spawn('rundll32.exe',['url.dll,FileProtocolHandler',url],{detached:true,stdio:'ignore',windowsHide:true}).unref();

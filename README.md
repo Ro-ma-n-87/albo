@@ -38,6 +38,8 @@ Die Symbole sind lokal mitgeliefert; die PC-Oberfläche braucht kein externes CD
 
 ## iPhone mit dem PC verbinden — Gerätetest noch offen
 
+Für den Zugriff über Mobilfunk von Baustellen aus ist der private NetBird-Modus für 1–5 Personen vorbereitet. Einstieg: **[BAUSTELLEN-ZUGRIFF.md](BAUSTELLEN-ZUGRIFF.md)**. Er trennt die lokale PC-Verwaltung von einem ausschließlich mit Kopplungsschlüssel erreichbaren Datenendpunkt. NetBird-Installation, Kontoanmeldung und echter Mobilfunktest sind noch offen.
+
 Für den regulären Netzwerkbetrieb unterstützt der Server HTTPS mit einem vertrauenswürdigen Zertifikat. Die Dateipfade werden über `ALBO_TLS_KEY` und `ALBO_TLS_CERT` gesetzt; anschließend den Server mit `--lan` starten. Diese Einrichtung verändert weder Firewall noch Router automatisch.
 
 Für einen ausdrücklich unverschlüsselten Test im vertrauten lokalen Netz:

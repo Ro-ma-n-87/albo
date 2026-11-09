@@ -2,6 +2,8 @@
 
 Stand: 9. November 2026. Das Gesamtziel ist nicht abgeschlossen.
 
+Neu: Privater Baustellenzugriff für 1–5 Personen mit NetBird vorbereitet. Die Verwaltung bleibt auf localhost:8787; der getrennte Abgleich bindet nur an die NetBird-IP auf Port 8788. Neun Server-Tests bestanden, einschließlich Abweisung lokaler Browser-Sitzungen und administrativer Endpunkte am Baustellenzugang. Aktualisierte iOS-Unterstützung und zusätzlicher nativer Test müssen noch im neuen Build geprüft werden. Der bisherige erfolgreiche Build unten enthält diesen VPN-Schalter noch nicht.
+
 Die öffentliche Veröffentlichung im Repository `Ro-ma-n-87/albo` wurde vom Nutzer ausdrücklich freigegeben. [Build 42670462238](https://github.com/Ro-ma-n-87/albo/actions/runs/42670462238) ist erfolgreich abgeschlossen. Quellcommit: `8a35536f94ca8bef6053949502224720657b89d5`.
 
 Die erzeugte Datei `ALBOConnect-unsigned.ipa` hat 1.046.430 Bytes und die SHA-256-Prüfsumme `e0902129467c4b6bb37e075c16cd52372fc01faaba63860c713d6042bb545814`. Nach dem Download wurden Archivstruktur, Prüfsumme, arm64-Mach-O-Code und die iOS-Geräteplattform geprüft. Die Datei ist **nicht Apple-signiert** und enthält kein Provisioning-Profil.

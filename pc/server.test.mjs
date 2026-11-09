@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {createWorkspaceServer,emptyDatabase,mergeDatabase} from './server.mjs';
+import http from 'node:http';
+import {createWorkspaceServer,emptyDatabase,mergeDatabase,privateVPNAddress} from './server.mjs';
 const ids={job:'11111111-1111-4111-8111-111111111111',worker:'22222222-2222-4222-8222-222222222222',other:'33333333-3333-4333-8333-333333333333'};
 const job=(title='Wartung')=>({id:ids.job,title,customer:'Familie Müller',address:'Teststraße 1',status:'In Arbeit',notes:''});
 function removeTestDirectory(dir){const absolute=path.resolve(dir);assert.ok(absolute.startsWith(path.resolve(os.tmpdir())+path.sep)&&path.basename(absolute).startsWith('albo-'));fs.rmSync(absolute,{recursive:true,force:true});}
@@ -71,4 +72,29 @@ test('signed baselines support long offline periods and reject tampered starting
  assert.equal((await f.call('sync',{method:'POST',body:JSON.stringify(request)})).status,200);
  request.baseSnapshot.database.employees[0].name='Manipulierter Ausgangsstand';
  assert.equal((await f.call('sync',{method:'POST',body:JSON.stringify(request)})).status,403);
+});
+test('private VPN API exposes only paired sync and never the local administration',async t=>{
+ const f=await fixture(t),remote=http.createServer(f.app.remoteHandler);
+ const address=await new Promise(resolve=>remote.listen(0,'127.0.0.1',()=>resolve(remote.address())));
+ t.after(()=>new Promise(resolve=>remote.close(resolve)));
+ const url='http://127.0.0.1:'+address.port;
+ assert.equal((await fetch(url+'/api/local-session',{method:'POST',headers:{Host:'localhost'},body:'{}'})).status,403);
+ assert.equal((await fetch(url+'/')).status,403);
+ assert.equal((await fetch(url+'/api/workspace')).status,401);
+ const login=await f.call('local-session',{method:'POST',body:'{}'}),cookie=login.headers.get('set-cookie').split(';')[0];
+ assert.equal((await fetch(url+'/api/workspace',{headers:{Cookie:cookie}})).status,401);
+ const paired=await f.call('keys',{method:'POST',body:JSON.stringify({role:'admin',label:'VPN iPhone'})});
+ const headers={Authorization:'Bearer '+paired.body.token,'Content-Type':'application/json'};
+ assert.equal((await fetch(url+'/api/keys',{headers})).status,403);
+ const response=await fetch(url+'/api/workspace',{headers}),snapshot=await response.json();assert.equal(response.status,200);
+ const database=structuredClone(snapshot.backup.database);database.jobs.push(job('Von der Baustelle'));
+ const saved=await fetch(url+'/api/sync',{method:'POST',headers,body:JSON.stringify({workspaceID:snapshot.workspaceID,baseRevision:snapshot.revision,backup:{version:1,database,photos:{}}})});assert.equal(saved.status,200);
+ assert.equal((await f.call('workspace')).body.backup.database.jobs[0].title,'Von der Baustelle');
+ await f.call('keys/'+paired.body.id,{method:'DELETE'});
+ assert.equal((await fetch(url+'/api/workspace',{headers})).status,401);
+});
+test('VPN listener is restricted to its private overlay address range',()=>{
+ for(const address of ['100.64.0.1','100.80.10.20','100.127.255.254'])assert.equal(privateVPNAddress(address),true);
+ for(const address of ['0.0.0.0','8.8.8.8','192.168.1.1','100.63.255.255','100.128.0.1','100.80.10.999',undefined])assert.equal(privateVPNAddress(address),false);
+ assert.throws(()=>createWorkspaceServer({vpnHost:'0.0.0.0'}),/NetBird-Adresse/);
 });
