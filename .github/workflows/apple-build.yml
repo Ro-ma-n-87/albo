@@ -1,0 +1,47 @@
+name: Apple App Build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  pc-server-tests:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test persistence, conflicts and device permissions
+        run: node --test pc/server.test.mjs
+  build-and-test:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test iPhone simulator
+        run: bash scripts/test-on-mac.sh
+      - name: Upload simulator application and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ALBOConnect-Simulator
+          path: |
+            build/DerivedData/Build/Products/Debug-iphonesimulator/ALBOConnect.app
+            build/*.xcresult
+          if-no-files-found: warn
+  build-device-ipa:
+    needs: [pc-server-tests, build-and-test]
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build unsigned IPA for real iPhone and iPad hardware
+        run: bash scripts/build-unsigned-ipa-on-mac.sh
+      - name: Upload unsigned device IPA and signing status
+        uses: actions/upload-artifact@v4
+        with:
+          name: ALBOConnect-unsigned-IPA
+          path: build/ipa/
+          if-no-files-found: error
+          retention-days: 7
